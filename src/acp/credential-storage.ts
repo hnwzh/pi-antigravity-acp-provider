@@ -1,19 +1,19 @@
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 import { inspectAntigravityAuth, resolveAntigravityAcpDirectory } from "./antigravity.js";
+import {
+	defaultKeychainLookup,
+	KEYCHAIN_ACCOUNT,
+	KEYCHAIN_SERVICE,
+	type KeychainEntryProbe,
+} from "./keychain.js";
+
+export { KEYCHAIN_ACCOUNT, KEYCHAIN_SERVICE };
 
 /** Selects the Antigravity ACP server's secure-file credential backend
  * (`credential_store.py`: `AGY_ACP_FORCE_FILE_STORAGE`). */
 export const FORCE_FILE_STORAGE_ENV = "AGY_ACP_FORCE_FILE_STORAGE";
 
-/** macOS keychain coordinates of the server's consumer (CCPA) credential:
- * `credential_store.KEYCHAIN_SERVICE` and the consumer `_KEYCHAIN_ACCOUNT`. */
-export const KEYCHAIN_SERVICE = "gemini";
-export const KEYCHAIN_ACCOUNT = "antigravity-acp";
-
-const SECURITY_CLI = "/usr/bin/security";
-const KEYCHAIN_LOOKUP_TIMEOUT_MS = 3_000;
 
 export type CredentialStorageReason =
 	| "explicit-override"
@@ -33,21 +33,9 @@ export interface CredentialStorageOptions {
 	platform?: NodeJS.Platform;
 	tokenPath?: string;
 	/** Injectable keychain probe for tests; returns whether the entry exists. */
-	keychainEntry?: (service: string, account: string) => boolean;
+	keychainEntry?: KeychainEntryProbe;
 }
 
-function defaultKeychainLookup(service: string, account: string): boolean {
-	try {
-		execFileSync(SECURITY_CLI, ["find-generic-password", "-s", service, "-a", account], {
-			timeout: KEYCHAIN_LOOKUP_TIMEOUT_MS,
-			stdio: "ignore",
-		});
-		return true;
-	} catch {
-		// Absent, locked, or denied: treat the entry as unavailable.
-		return false;
-	}
-}
 
 /** The server prefers the login keychain on macOS and falls back to the secure
  * file only when that keychain is unusable. A plaintext token file that the

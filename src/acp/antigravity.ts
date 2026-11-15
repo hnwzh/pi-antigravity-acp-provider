@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { AntigravityAcpError } from "./errors.js";
+import { keychainCredentialPresent, type KeychainEntryProbe } from "./keychain.js";
 
 export interface AntigravityLaunch {
 	command: string;
@@ -122,9 +123,18 @@ export function inspectAntigravityAuth(
 	return { status: "missing", tokenFile, settingsFile };
 }
 
-export function hasAntigravityAuth(): boolean {
+/** A usable credential is not necessarily a file: on macOS the server keeps
+ * its OAuth token in the login keychain, so a keychain-only login still lets Pi
+ * refresh the model catalog instead of staying on the offline fallback. */
+export function hasAntigravityAuth(
+	options: { platform?: NodeJS.Platform; keychainEntry?: KeychainEntryProbe } = {},
+): boolean {
 	const status = inspectAntigravityAuth().status;
-	return status === "api-key-env" || status === "oauth-refreshable";
+	return (
+		status === "api-key-env" ||
+		status === "oauth-refreshable" ||
+		keychainCredentialPresent(options.platform, options.keychainEntry)
+	);
 }
 
 /** Local logout. Google currently advertises logout as an agent command rather

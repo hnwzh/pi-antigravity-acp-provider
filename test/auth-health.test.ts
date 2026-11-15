@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
 	clearAntigravityCredentials,
+	hasAntigravityAuth,
 	inspectAntigravityAuth,
 	removeConversation,
 	resolveAntigravityAcpDirectory,
@@ -86,6 +87,41 @@ describe("Antigravity auth health", () => {
 		fs.writeFileSync(path.join(directory, "acp_token.json"), '{"refresh_token":"secret"}');
 		expect(inspectAntigravityAuth(directory, { GEMINI_API_KEY: "child-key" }).status).toBe("api-key-env");
 		expect(inspectAntigravityAuth(directory, {}).status).toBe("oauth-refreshable");
+	});
+});
+
+describe("hasAntigravityAuth", () => {
+	/** Points the inspected store at a directory without any credential file. */
+	function withoutTokenFile<T>(run: () => T): T {
+		const previousHome = process.env.GEMINI_HOME;
+		const previousKey = process.env.GEMINI_API_KEY;
+		process.env.GEMINI_HOME = root();
+		delete process.env.GEMINI_API_KEY;
+		try {
+			return run();
+		} finally {
+			if (previousHome === undefined) delete process.env.GEMINI_HOME;
+			else process.env.GEMINI_HOME = previousHome;
+			if (previousKey !== undefined) process.env.GEMINI_API_KEY = previousKey;
+		}
+	}
+
+	it("accepts a macOS keychain credential without an acp_token.json mirror", () => {
+		expect(
+			withoutTokenFile(() => hasAntigravityAuth({ platform: "darwin", keychainEntry: () => true })),
+		).toBe(true);
+	});
+
+	it("reports no credential when neither the keychain nor a token file holds one", () => {
+		expect(
+			withoutTokenFile(() => hasAntigravityAuth({ platform: "darwin", keychainEntry: () => false })),
+		).toBe(false);
+	});
+
+	it("ignores the macOS keychain on other platforms", () => {
+		expect(withoutTokenFile(() => hasAntigravityAuth({ platform: "linux", keychainEntry: () => true }))).toBe(
+			false,
+		);
 	});
 });
 

@@ -24,19 +24,10 @@ export const FALLBACK_MODELS: readonly Model<typeof API_ID>[] = [
 		medium: "gemini-4-argon-medium",
 		high: "gemini-4-argon-high",
 	}),
-	reasoningModel("gemini-3.7-flash", "Gemini 3.7 Flash", {
-		low: "gemini-3.7-flash-low",
-		medium: "gemini-3.7-flash-medium",
-		high: "gemini-3.7-flash-high",
-	}),
-	reasoningModel("gemini-3.6-flash", "Gemini 3.6 Flash", {
-		low: "gemini-3.6-flash-low",
-		medium: "gemini-3.6-flash-medium",
-		high: "gemini-3.6-flash-high",
-	}),
-	reasoningModel("gemini-3.1-pro", "Gemini 3.1 Pro", {
-		low: "gemini-3.1-pro-low",
-		high: "gemini-pro-agent",
+	reasoningModel("gemini-4-hydrogen", "Gemini 4 Hydrogen", {
+		low: "gemini-4-hydrogen-low",
+		medium: "gemini-4-hydrogen-medium",
+		high: "gemini-4-hydrogen-high",
 	}),
 ];
 

@@ -4,9 +4,12 @@ import { FALLBACK_MODELS, projectModels, resolveAcpModelId, splitEffortSuffix } 
 import { createAntigravityProvider } from "../src/provider.js";
 
 describe("projectModels", () => {
-	it("keeps Flash as the conservative offline default while allowing explicit Argon selection", () => {
-		expect(FALLBACK_MODELS[0]?.id).toBe("gemini-3.8-flash");
-		expect(FALLBACK_MODELS.some((model) => model.id === "gemini-4-argon")).toBe(true);
+	it("ships only models the account still serves, Flash first for the offline default", () => {
+		expect(FALLBACK_MODELS.map((model) => model.id)).toEqual([
+			"gemini-3.8-flash",
+			"gemini-4-argon",
+			"gemini-4-hydrogen",
+		]);
 	});
 
 	it.each(["low", "medium", "high"])("splits a known %s suffix without truncating the base", (effort) => {
