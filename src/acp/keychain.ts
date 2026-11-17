@@ -28,11 +28,14 @@ export function defaultKeychainLookup(service: string, account: string): boolean
  * macOS keeps the server's OAuth credential in the login keychain; the
  * plaintext `acp_token.json` is only a fallback mirror. A keychain-only login
  * is therefore still a usable credential, and callers that gate network model
- * discovery on credential presence must not require the file.
+ * discovery on credential presence must not require the file. An explicitly
+ * forced file backend cannot use this credential; mirror the server's accepted
+ * AGY_ACP_FORCE_FILE_STORAGE values.
  */
 export function keychainCredentialPresent(
 	platform: NodeJS.Platform = process.platform,
 	probe: KeychainEntryProbe = defaultKeychainLookup,
 ): boolean {
-	return platform === "darwin" && probe(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
+	const forceFile = process.env.AGY_ACP_FORCE_FILE_STORAGE?.toLowerCase() ?? "";
+	return !["1", "true", "yes"].includes(forceFile) && platform === "darwin" && probe(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT);
 }

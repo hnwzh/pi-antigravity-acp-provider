@@ -4,7 +4,7 @@ import { FALLBACK_MODELS, projectModels, resolveAcpModelId, splitEffortSuffix } 
 import { createAntigravityProvider } from "../src/provider.js";
 
 describe("projectModels", () => {
-	it("ships only models the account still serves, Flash first for the offline default", () => {
+	it("ships a conservative model snapshot, Flash first for the offline default", () => {
 		expect(FALLBACK_MODELS.map((model) => model.id)).toEqual([
 			"gemini-3.8-flash",
 			"gemini-4-argon",

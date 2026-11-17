@@ -95,14 +95,19 @@ describe("hasAntigravityAuth", () => {
 	function withoutTokenFile<T>(run: () => T): T {
 		const previousHome = process.env.GEMINI_HOME;
 		const previousKey = process.env.GEMINI_API_KEY;
+		const previousForceFile = process.env.AGY_ACP_FORCE_FILE_STORAGE;
 		process.env.GEMINI_HOME = root();
 		delete process.env.GEMINI_API_KEY;
+		delete process.env.AGY_ACP_FORCE_FILE_STORAGE;
 		try {
 			return run();
 		} finally {
 			if (previousHome === undefined) delete process.env.GEMINI_HOME;
 			else process.env.GEMINI_HOME = previousHome;
-			if (previousKey !== undefined) process.env.GEMINI_API_KEY = previousKey;
+			if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+			else process.env.GEMINI_API_KEY = previousKey;
+			if (previousForceFile === undefined) delete process.env.AGY_ACP_FORCE_FILE_STORAGE;
+			else process.env.AGY_ACP_FORCE_FILE_STORAGE = previousForceFile;
 		}
 	}
 
@@ -110,6 +115,31 @@ describe("hasAntigravityAuth", () => {
 		expect(
 			withoutTokenFile(() => hasAntigravityAuth({ platform: "darwin", keychainEntry: () => true })),
 		).toBe(true);
+	});
+
+	it.each(["1", "true", "TRUE", "yes", "YES"])("ignores keychain credentials when file storage is forced with %s", (value) => {
+		withoutTokenFile(() => {
+			process.env.AGY_ACP_FORCE_FILE_STORAGE = value;
+			let probes = 0;
+			expect(hasAntigravityAuth({ platform: "darwin", keychainEntry: () => { probes++; return true; } })).toBe(false);
+			expect(probes).toBe(0);
+		});
+	});
+
+	it.each(["0", "false", "no"])("retains keychain auth when the override is %s", (value) => {
+		withoutTokenFile(() => {
+			process.env.AGY_ACP_FORCE_FILE_STORAGE = value;
+			expect(hasAntigravityAuth({ platform: "darwin", keychainEntry: () => true })).toBe(true);
+		});
+	});
+
+	it("still accepts a refreshable token file when file storage is forced", () => {
+		withoutTokenFile(() => {
+			process.env.AGY_ACP_FORCE_FILE_STORAGE = "1";
+			fs.mkdirSync(resolveAntigravityAcpDirectory(), { recursive: true });
+			fs.writeFileSync(path.join(resolveAntigravityAcpDirectory(), "acp_token.json"), '{"refresh_token":"secret"}');
+			expect(hasAntigravityAuth({ platform: "darwin", keychainEntry: () => false })).toBe(true);
+		});
 	});
 
 	it("reports no credential when neither the keychain nor a token file holds one", () => {
