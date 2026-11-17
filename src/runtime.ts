@@ -558,6 +558,10 @@ export class AntigravityRuntime {
 				await this.invalidateBinding(binding);
 				this.assertSessionEpoch(key, epoch, sessionEpoch);
 				binding = await this.getBinding(key, model, acpModelId, options.apiKey, writer, tools, options.signal);
+			} else if (isConnectionDead(binding.connection)) {
+				await this.dropBinding(key, binding, false);
+				this.assertSessionEpoch(key, epoch, sessionEpoch);
+				binding = await this.getBinding(key, model, acpModelId, options.apiKey, writer, tools, options.signal);
 			}
 
 			// A permission tool result resumes the still-running ACP prompt rather than
@@ -579,6 +583,7 @@ export class AntigravityRuntime {
 					this.noteContinuationInstructions(binding, context);
 					binding.pendingContextCount = context.messages.length;
 					binding.pendingContextFingerprint = messagesFingerprint(context.messages);
+					this.commitProgress(binding);
 					binding.permission = undefined;
 					clearTimeout(pending.timer);
 					if (
@@ -620,6 +625,7 @@ export class AntigravityRuntime {
 					this.noteContinuationInstructions(binding, context);
 					binding.pendingContextCount = context.messages.length;
 					binding.pendingContextFingerprint = messagesFingerprint(context.messages);
+					this.commitProgress(binding);
 					for (const { pending, message } of results) {
 						binding.pendingTools.delete(pending.invocation.id);
 						pending.resolve(toMcpToolResult(message as ToolResultMessage));
@@ -689,9 +695,13 @@ export class AntigravityRuntime {
 				);
 				await this.modeChanges;
 				this.assertSessionEpoch(key, epoch, sessionEpoch);
-				if (binding.mode !== this.permissionMode || this.confirmedMode(binding) !== this.permissionMode || !binding.connection.process.alive) {
+				if (binding.mode !== this.permissionMode || this.confirmedMode(binding) !== this.permissionMode) {
 					await this.invalidateBinding(binding);
 					throw new AntigravityAcpError("protocol", "Permission mode changed before prompting; retry the turn");
+				}
+				if (isConnectionDead(binding.connection)) {
+					await this.dropBinding(key, binding, false);
+					throw new AntigravityAcpError("process_exit", "Antigravity ACP connection closed before prompting");
 				}
 				binding.instructionsFingerprint = instructionFingerprint(context);
 				binding.needsReconstruction = false;
@@ -754,9 +764,13 @@ export class AntigravityRuntime {
 						activeWriter.done("stop");
 				}
 			} catch (error) {
-				binding.writer?.fail(error, isAbort(error));
+				if ((binding.permission || binding.pendingTools.size > 0) && (binding.writer ?? writer).finished) {
+					this.commitProgress(binding, (binding.writer ?? writer).message);
+				}
 				if (isAbort(error) || binding.abortRequested) abortTurn(binding);
-				if (!binding.connection.process.alive) await this.dropBinding(key, binding);
+				// Evict closing connections before failing the stream can wake a retry.
+				if (isConnectionDead(binding.connection)) await this.dropBinding(key, binding);
+				binding.writer?.fail(error, isAbort(error));
 				throw error;
 			} finally {
 				if (onTurnAbort) options.signal?.removeEventListener("abort", onTurnAbort);
@@ -830,12 +844,16 @@ export class AntigravityRuntime {
 		tools: Context["tools"],
 		signal?: AbortSignal,
 	): Promise<Binding> {
-		this.assertActive();
-		const existing = this.bindings.get(key);
-		if (existing) {
+		for (;;) {
+			this.assertActive();
+			const existing = this.bindings.get(key);
+			if (!existing) break;
 			const resolved = await existing;
-			this.touchBinding(resolved);
-			return resolved;
+			if (!isConnectionDead(resolved.connection)) {
+				this.touchBinding(resolved);
+				return resolved;
+			}
+			await this.dropBinding(key, resolved, false);
 		}
 		let created!: Promise<Binding>;
 		created = (async () => {
@@ -977,6 +995,14 @@ export class AntigravityRuntime {
 			await Promise.allSettled([connection.close(), bridge?.close() ?? Promise.resolve()]);
 			throw error;
 		}
+	}
+
+	private commitProgress(binding: Binding, assistantMessage?: Context["messages"][number]): void {
+		if (binding.pendingContextCount <= 0) return;
+		binding.messageCount = binding.pendingContextCount;
+		binding.historyFingerprint = binding.pendingContextFingerprint;
+		binding.expectedAssistantFingerprint = assistantMessage ? messageFingerprint(assistantMessage) : undefined;
+		this.persistBinding(binding);
 	}
 
 	private persistBinding(binding: Binding): void {
@@ -1417,6 +1443,10 @@ async function raceAuthentication<T>(
 		step.then((value) => ({ authenticated: false as const, value })),
 		authentication.then(() => ({ authenticated: true as const })),
 	]);
+}
+
+function isConnectionDead(connection: AntigravityAcpConnection): boolean {
+	return connection.closed === true || !connection.process.alive;
 }
 
 function isAbort(error: unknown): boolean {
