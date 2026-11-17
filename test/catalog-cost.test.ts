@@ -47,16 +47,20 @@ describe("usageFromPrompt cost accounting", () => {
 		expect(usage.cost.totalFromProvider).toBe(false);
 	});
 
-	it("prices cache reads at the discounted rate", () => {
+	it.each([
+		["net", 1_500_000, 1_000_000],
+		["legacy gross", 1_000_000, 500_000],
+	] as const)("prices cache reads at the discounted rate for %s input", (_format, totalTokens, expectedInput) => {
 		const flash = FALLBACK_MODELS.find((model) => model.id === "gemini-3.8-flash")!;
 		const usage = usageFromPrompt(
-			{ stopReason: "end_turn", usage: { inputTokens: 1_000_000, outputTokens: 0, cachedReadTokens: 500_000, totalTokens: 1_500_000 } },
+			{ stopReason: "end_turn", usage: { inputTokens: 1_000_000, outputTokens: 0, cachedReadTokens: 500_000, totalTokens } },
 			flash,
 		);
 		expect(usage.cacheRead).toBe(500_000);
-		expect(usage.input).toBe(500_000);
+		expect(usage.input).toBe(expectedInput);
+		expect(usage.totalTokens).toBe(totalTokens);
 		expect(usage.cost.cacheRead).toBeCloseTo(500_000 * 0.075 / 1_000_000, 6);
-		expect(usage.cost.input).toBeCloseTo(500_000 * 0.75 / 1_000_000, 6);
+		expect(usage.cost.input).toBeCloseTo(expectedInput * 0.75 / 1_000_000, 6);
 	});
 
 	it("stays at zero cost when no model is supplied (legacy callers)", () => {
