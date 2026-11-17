@@ -7,8 +7,8 @@ describe("projectModels", () => {
 	it("ships a conservative model snapshot, Flash first for the offline default", () => {
 		expect(FALLBACK_MODELS.map((model) => model.id)).toEqual([
 			"gemini-3.8-flash",
-			"gemini-4-argon",
 			"gemini-4-hydrogen",
+			"gemini-4-argon",
 		]);
 	});
 
