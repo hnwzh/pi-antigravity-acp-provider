@@ -157,6 +157,9 @@ export class PiMcpBridge {
 				keepalive = undefined;
 			};
 			if (typeof progressToken === "string" || typeof progressToken === "number") {
+				// Count wait intervals, not a percentage of tool completion. MCP requires
+				// strictly increasing progress even when the total is unknown.
+				let progress = 0;
 				const sendProgress = () => {
 					if (extra.signal.aborted) {
 						stopKeepalive();
@@ -166,7 +169,7 @@ export class PiMcpBridge {
 						method: "notifications/progress",
 						params: {
 							progressToken,
-							progress: 0,
+							progress: progress++,
 							message: "Waiting for Pi tool execution",
 						},
 					}).catch(() => undefined);

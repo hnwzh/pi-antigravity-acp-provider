@@ -110,7 +110,7 @@ describe("PiMcpBridge", () => {
 		}
 	});
 
-	it("emits SSE notifications/progress heartbeats while a bridged tool call waits with a progressToken", async () => {
+	it("keeps a pending tool alive past the client timeout with increasing progress", async () => {
 		let releaseCall!: () => void;
 		const bridge = new PiMcpBridge({
 			tools,
@@ -134,6 +134,9 @@ describe("PiMcpBridge", () => {
 				{ name: "pi_echo", arguments: { text: "slow" } },
 				undefined,
 				{
+					timeout: 500,
+					maxTotalTimeout: 5_000,
+					resetTimeoutOnProgress: true,
 					onprogress: (progress) => {
 						progressEvents.push({
 							progress: progress.progress,
@@ -144,10 +147,15 @@ describe("PiMcpBridge", () => {
 			);
 			pending.catch(() => undefined);
 			await vi.waitFor(() => expect(progressEvents.length).toBeGreaterThanOrEqual(3));
-			expect(progressEvents.every((entry) => entry.progress === 0)).toBe(true);
+			// Without resetTimeoutOnProgress or keepalives, this exceeds timeout: 500.
+			await new Promise((resolve) => setTimeout(resolve, 650));
+			expect(progressEvents.every((entry, index) => index === 0 || entry.progress > progressEvents[index - 1]!.progress)).toBe(true);
 			releaseCall();
 			const result = await pending;
 			expect(result.content).toEqual([{ type: "text", text: "finished" }]);
+			const countAtCompletion = progressEvents.length;
+			await new Promise((resolve) => setTimeout(resolve, 75));
+			expect(progressEvents).toHaveLength(countAtCompletion);
 		} finally {
 			releaseCall?.();
 			await client.close();
